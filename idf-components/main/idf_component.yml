@@ -1,0 +1,6 @@
+## IDF Component Manager Manifest File
+dependencies:
+  ## Required IDF version
+  idf: ">=5.3"
+  espressif/esp_lvgl_port: ^2.7.0
+  tuanpmt/esp_epaper: ^2.0.0
