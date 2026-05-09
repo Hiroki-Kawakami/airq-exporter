@@ -4,8 +4,10 @@
 #include "esp_log.h"
 #include "exporter_app.hpp"
 #include "config.hpp"
+#include "platform_port.hpp"
 
 static const char *TAG = "main";
+static lv_display_t *disp;
 
 static void lvgl_init() {
     lvgl_port_cfg_t lvgl_cfg = {
@@ -68,7 +70,7 @@ static void epd_init() {
     lvgl_cfg.partial_threshold = 2000;  // Force full refresh every N partial updates
     lvgl_cfg.dither_mode = EPD_DITHER_FLOYD_STEINBERG;  // Enable grayscale dithering
 
-    lv_display_t *disp = epd_lvgl_init(&lvgl_cfg);
+    disp = epd_lvgl_init(&lvgl_cfg);
     if (!disp) {
         ESP_LOGE(TAG, "Failed to init LVGL display");
         epd_deinit(epd);
@@ -76,8 +78,19 @@ static void epd_init() {
     }
 }
 
+void epd_refresh(bool full_refresh) {
+    if (full_refresh) epd_lvgl_force_full_refresh(disp);
+    epd_lvgl_refresh(disp);
+}
+
 extern "C" void app_main(void) {
     lvgl_init();
     epd_init();
+
+    auto err = bsp_airq_init();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "AirQ BSP Initialize failed: %s", esp_err_to_name(err));
+    }
+
     exporter_app();
 }
