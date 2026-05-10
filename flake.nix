@@ -35,10 +35,14 @@
             pkgs.curl
             pkgs.cjson
             pkgs.SDL2
+            pkgs.httplib
           ];
           shellHook = ''
             export ESP_IDF_VERSION="5.4"
             export HOST_GCC="${pkgs.gcc}"
+            ${pkgs.lib.optionalString pkgs.stdenv.isDarwin ''
+              export NIX_CFLAGS_COMPILE="-iframework $(xcrun --show-sdk-path)/System/Library/Frameworks $NIX_CFLAGS_COMPILE"
+            ''}
           '';
         };
       }

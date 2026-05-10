@@ -17,6 +17,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 find_package(SDL2 REQUIRED)
 find_package(CURL REQUIRED)
 find_package(CJSON REQUIRED)
+find_package(httplib REQUIRED)
 
 # Load LVGL
 FetchContent_Declare(
@@ -47,5 +48,5 @@ file(GLOB_RECURSE DEVICE_SOURCES CONFIGURE_DEPENDS src/*.c src/*.cpp)
 target_compile_definitions(simulator PRIVATE SDL_DISABLE_ARM_NEON_H)
 target_sources(simulator PRIVATE ${DEVICE_SOURCES})
 target_include_directories(simulator PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-target_link_libraries(simulator SDL2::SDL2 lvgl CURL::libcurl cjson)
+target_link_libraries(simulator SDL2::SDL2 lvgl CURL::libcurl cjson httplib::httplib)
 target_add_components(simulator ${CMAKE_CURRENT_SOURCE_DIR}/../app)

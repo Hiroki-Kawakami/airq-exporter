@@ -1,21 +1,34 @@
 #include "exporter_app.hpp"
 #include "lvgl.hpp"
 #include "platform_port.hpp"
+#include "httpd.hpp"
+#include "prometheus_exporter.hpp"
 
 static const char *TAG = "exporter_app";
 
-// SCD4x labels
-static lv_obj_t *label_co2  = nullptr;
-static lv_obj_t *label_temp = nullptr;
-static lv_obj_t *label_hum  = nullptr;
-
-// SEN5x labels
+// LVGL labels
+static lv_obj_t *label_co2       = nullptr;
+static lv_obj_t *label_temp      = nullptr;
+static lv_obj_t *label_hum       = nullptr;
 static lv_obj_t *label_sen5x_temp = nullptr;
 static lv_obj_t *label_sen5x_hum  = nullptr;
-static lv_obj_t *label_pm2p5      = nullptr;
-static lv_obj_t *label_pm10p0     = nullptr;
-static lv_obj_t *label_voc        = nullptr;
-static lv_obj_t *label_nox        = nullptr;
+static lv_obj_t *label_pm2p5     = nullptr;
+static lv_obj_t *label_pm10p0    = nullptr;
+static lv_obj_t *label_voc       = nullptr;
+static lv_obj_t *label_nox       = nullptr;
+
+// Prometheus metrics
+static PrometheusExporter::Metric *metric_co2        = nullptr;
+static PrometheusExporter::Metric *metric_scd4x_temp = nullptr;
+static PrometheusExporter::Metric *metric_scd4x_hum  = nullptr;
+static PrometheusExporter::Metric *metric_sen5x_temp = nullptr;
+static PrometheusExporter::Metric *metric_sen5x_hum  = nullptr;
+static PrometheusExporter::Metric *metric_pm1p0      = nullptr;
+static PrometheusExporter::Metric *metric_pm2p5      = nullptr;
+static PrometheusExporter::Metric *metric_pm4p0      = nullptr;
+static PrometheusExporter::Metric *metric_pm10p0     = nullptr;
+static PrometheusExporter::Metric *metric_voc        = nullptr;
+static PrometheusExporter::Metric *metric_nox        = nullptr;
 
 static lv_obj_t *make_label(lv_obj_t *scr, lv_align_t align, int32_t x, int32_t y, const char *text) {
     lv_obj_t *label = lv_label_create(scr);
@@ -24,7 +37,7 @@ static lv_obj_t *make_label(lv_obj_t *scr, lv_align_t align, int32_t x, int32_t 
     return label;
 }
 
-void show_sensor_value() {
+static void show_sensor_value() {
     if (!label_co2) {
         lv_obj_t *scr = lv_screen_active();
         // Layout for 200×200 e-paper, 9 rows with ~21px spacing
@@ -49,6 +62,9 @@ void show_sensor_value() {
             lv_label_set_text_fmt(label_co2,  "CO2: %u ppm", co2);
             lv_label_set_text_fmt(label_temp, "Temp: %.1f C", temperature);
             lv_label_set_text_fmt(label_hum,  "Hum: %.1f%%", humidity);
+            metric_co2->set(co2);
+            metric_scd4x_temp->set(temperature);
+            metric_scd4x_hum->set(humidity);
         } else {
             LOG_E(TAG, "SCD4x read failed");
         }
@@ -72,6 +88,14 @@ void show_sensor_value() {
             lv_label_set_text_fmt(label_pm10p0,     "PM10:  %.1f ug/m3", pm10p0);
             lv_label_set_text_fmt(label_voc,        "VOC: %.1f", voc);
             lv_label_set_text_fmt(label_nox,        "NOx: %.1f", nox);
+            metric_sen5x_temp->set(temp);
+            metric_sen5x_hum->set(hum);
+            metric_pm1p0->set(pm1p0);
+            metric_pm2p5->set(pm2p5);
+            metric_pm4p0->set(pm4p0);
+            metric_pm10p0->set(pm10p0);
+            metric_voc->set(voc);
+            metric_nox->set(nox);
         } else {
             LOG_E(TAG, "SEN5x read values failed");
         }
@@ -81,8 +105,24 @@ void show_sensor_value() {
 }
 
 void exporter_app() {
-    scd4x_start_periodic_measurement(bsp_airq_scd4x);
+    static HttpServer http_server;
+    static PrometheusExporter exporter;
 
+    metric_co2        = exporter.addGauge("airq_co2_ppm",             "CO2 concentration");
+    metric_scd4x_temp = exporter.addGauge("airq_temperature_celsius", "Temperature", {{"sensor", "scd4x"}});
+    metric_scd4x_hum  = exporter.addGauge("airq_humidity_percent",    "Relative humidity", {{"sensor", "scd4x"}});
+    metric_sen5x_temp = exporter.addGauge("airq_temperature_celsius", "Temperature", {{"sensor", "sen5x"}});
+    metric_sen5x_hum  = exporter.addGauge("airq_humidity_percent",    "Relative humidity", {{"sensor", "sen5x"}});
+    metric_pm1p0      = exporter.addGauge("airq_pm_ugm3",             "Particulate matter concentration", {{"size", "1.0"}});
+    metric_pm2p5      = exporter.addGauge("airq_pm_ugm3",             "Particulate matter concentration", {{"size", "2.5"}});
+    metric_pm4p0      = exporter.addGauge("airq_pm_ugm3",             "Particulate matter concentration", {{"size", "4.0"}});
+    metric_pm10p0     = exporter.addGauge("airq_pm_ugm3",             "Particulate matter concentration", {{"size", "10.0"}});
+    metric_voc        = exporter.addGauge("airq_voc_index",           "VOC index (1-500)");
+    metric_nox        = exporter.addGauge("airq_nox_index",           "NOx index (1-500)");
+
+    exporter.start(http_server);
+
+    scd4x_start_periodic_measurement(bsp_airq_scd4x);
     sen5x_start_measurement(bsp_airq_sen5x);
 
     lv_lock();
